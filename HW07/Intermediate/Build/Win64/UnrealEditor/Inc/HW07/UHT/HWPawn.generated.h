@@ -16,6 +16,10 @@ struct FInputActionValue;
 #define HW07_HWPawn_generated_h
 
 #define FID_HW07_Source_HW07_Public_HWPawn_h_19_RPC_WRAPPERS_NO_PURE_DECLS \
+	DECLARE_FUNCTION(execIsHitGround); \
+	DECLARE_FUNCTION(execApplyGravity); \
+	DECLARE_FUNCTION(execRoll); \
+	DECLARE_FUNCTION(execFlight); \
 	DECLARE_FUNCTION(execLook); \
 	DECLARE_FUNCTION(execMove);
 

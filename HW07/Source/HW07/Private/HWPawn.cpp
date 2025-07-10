@@ -29,12 +29,35 @@ AHWPawn::AHWPawn()
 	CameraComp->bUsePawnControlRotation = false;
 
 	Speed = 600.0f;
+	AscentSpeed = 300.f;
+	G = 150.0f;
+	RollSpeed = 30.0f;
+	AirSpeed = 0.6f;
+	IsFlying = false;
 }
 
 // Called when the game starts or when spawned
 void AHWPawn::BeginPlay()
 {
 	Super::BeginPlay();
+
+}
+
+// Called every frame
+void AHWPawn::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	SavedDeltaTime = DeltaTime;
+
+	ApplyGravity();
+
+}
+
+// Called to bind functionality to input
+void AHWPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
 	APlayerController* PlayerController = Cast<APlayerController>(GetController());
 	if (PlayerController)
@@ -47,29 +70,11 @@ void AHWPawn::BeginPlay()
 				Subsystem->AddMappingContext(InputMappingContext, 0);
 			}
 		}
-
 	}
-
-	
-}
-
-// Called every frame
-void AHWPawn::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-
-	SavedDeltaTime = DeltaTime;
-
-}
-
-// Called to bind functionality to input
-void AHWPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
 	if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		if(APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+		if(PlayerController)
 		{
 			if (MoveAction)
 			{
@@ -86,6 +91,20 @@ void AHWPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 					this,
 					&AHWPawn::Look
 				);
+
+				EnhancedInput->BindAction(
+					FlightAction,
+					ETriggerEvent::Triggered,
+					this,
+					&AHWPawn::Flight
+				);
+				
+				EnhancedInput->BindAction(
+					RollAction,
+					ETriggerEvent::Triggered,
+					this,
+					&AHWPawn::Roll
+				);
 				
 			}
 		}
@@ -99,12 +118,26 @@ void AHWPawn::Move(const FInputActionValue& value)
 
 	if (!FMath::IsNearlyZero(MoveVector.X))
 	{
-		AddActorLocalOffset(GetActorForwardVector() * MoveVector.X * Speed * SavedDeltaTime);
+		if (IsFlying)
+		{
+			AddActorWorldOffset(GetActorForwardVector() * MoveVector.X * Speed * SavedDeltaTime * AirSpeed, true);
+		}
+		else
+		{
+			AddActorWorldOffset(GetActorForwardVector() * MoveVector.X * Speed * SavedDeltaTime, true);
+		}
 	}
 	
 	if (!FMath::IsNearlyZero(MoveVector.Y))
 	{
-		AddActorLocalOffset(GetActorRightVector() * MoveVector.Y * Speed * SavedDeltaTime);
+		if (IsFlying)
+		{
+			AddActorWorldOffset(GetActorRightVector() * MoveVector.Y * Speed * SavedDeltaTime * AirSpeed, true);
+		}
+		else
+		{
+			AddActorWorldOffset(GetActorRightVector() * MoveVector.Y * Speed * SavedDeltaTime, true);
+		}
 	}
 
 }
@@ -113,13 +146,74 @@ void AHWPawn::Look(const FInputActionValue& value)
 {
 	const FVector2D RotationVector = value.Get<FVector2D>();
 
-
 	FRotator DeltaRotation = FRotator(RotationVector.Y, RotationVector.X, 0.0f);
 
-	AddActorWorldRotation(DeltaRotation);
+	AddActorLocalRotation(DeltaRotation);
+}
 
-	//AddActorLocalRotation(DeltaRotation);
+void AHWPawn::Flight(const FInputActionValue& value)
+{
+	FVector Ascentvector = value.Get<FVector>();
 
+	if (!FMath::IsNearlyZero(Ascentvector.X))
+	{
+		AddActorLocalOffset(GetActorUpVector() * Ascentvector.X * AscentSpeed * SavedDeltaTime);
+	}
+
+	if (IsHitGround() == false && Ascentvector.X > 0)
+	{
+		IsFlying = true;
+	}
 
 }
+
+void AHWPawn::Roll(const FInputActionValue& value)
+{
+	FVector Rollvector = value.Get<FVector>();
+
+	if (!FMath::IsNearlyZero(Rollvector.X))
+	{
+		FRotator DeltaRotation = FRotator(0.0f, 0.0f, Rollvector.X * RollSpeed * SavedDeltaTime);
+
+		AddActorLocalRotation(DeltaRotation);
+	}
+}
+
+void AHWPawn::ApplyGravity()
+{
+	if (IsHitGround())
+	{
+		G = 0.0f;
+		IsFlying = false;
+	}
+	else
+	{
+		G = 150.0f;
+	}
+
+	AddActorWorldOffset(FVector(0, 0, -G) * SavedDeltaTime, true);
+
+}
+
+bool AHWPawn::IsHitGround()
+{
+	FHitResult OutHit;
+	FVector Start = GetActorLocation();
+	FVector End = Start + GetActorUpVector() * -60.0f;
+	ECollisionChannel TraceChannel = ECC_WorldStatic;
+	FCollisionQueryParams Params;
+
+	Params.AddIgnoredActor(this);
+
+	bool HitResult = GetWorld()->LineTraceSingleByChannel(
+		OutHit,
+		Start,
+		End,
+		TraceChannel,
+		Params
+	);
+
+	return HitResult;
+}
+
 
